@@ -121,9 +121,10 @@ tar -xJf %{SOURCE1} -C %{_builddir}
 # "Illegal instruction (core dumped)" while the same source built locally ran
 # fine. So the target is pinned explicitly. x86-64-v2 is the level Fedora itself
 # builds for, and the shader work is on the GPU, so a wider baseline buys nothing.
-# Raise it to x86-64-v3 only if every machine that runs this is known to have
-# AVX2.
-%global zigcpu x86-64-v2
+# Raise it to x86_64_v3 only if every machine that runs this is known to have
+# AVX2. Zig spells these levels with underscores (`-Dcpu=x86_64_v2`); the GCC
+# `-march=x86-64-v2` spelling is rejected as an unknown CPU model.
+%global zigcpu x86_64_v2
 
 %build
 # Zig's dependency fetch and compilation cache live under the builddir so nothing

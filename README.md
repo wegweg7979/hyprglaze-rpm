@@ -33,9 +33,10 @@ watcher into. Fedora has no package named `hyprland`; the Omedora COPR's
 - **`--build-id=sha1` is passed to `zig build`.** Zig emits no GNU build-id note by
   default and Fedora's `find-debuginfo` runs with `--strict-build-id`, which aborts
   the build on such a binary. The flag makes the debuginfo package real instead.
-- **`-Dcpu=x86-64-v2` is passed to `zig build`.** Zig defaults to `-Dcpu=native`, so
-  the first published build compiled for the COPR *builder's* microarchitecture —
-  it carried AVX-512 and died with `Illegal instruction (core dumped)` on the target
+- **`-Dcpu=x86_64_v2` is passed to `zig build`** (Zig's spelling; the GCC
+  `-march=x86-64-v2` form is rejected). Zig defaults to `-Dcpu=native`, so the
+  first published build compiled for the COPR *builder's* microarchitecture — it
+  carried AVX-512 and died with `Illegal instruction (core dumped)` on the target
   machines, which do not have it. The level is pinned in `%global zigcpu`.
 
 ## Updating the pin
