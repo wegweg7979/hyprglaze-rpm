@@ -43,7 +43,7 @@
 
 Name:           hyprglaze
 Version:        0.1.0
-Release:        1.%{commitdate}git%{shortcommit}%{?dist}
+Release:        2.%{commitdate}git%{shortcommit}%{?dist}
 Summary:        Shader wallpaper daemon for Hyprland that reacts to windows, cursor and music
 
 License:        MIT
@@ -113,6 +113,18 @@ tracks windows mid-drag instead of polling the IPC socket.
 # zig-x86_64-linux-%{zigversion}/, which is what PATH below points at).
 tar -xJf %{SOURCE1} -C %{_builddir}
 
+# CPU baseline: Zig's standardTargetOptions defaults to -Dcpu=native, so a
+# COPR-shaped build compiles for the BUILDER's microarchitecture. Measured on the
+# first published build: the artifact carried AVX-512 (385 zmm references, 151
+# AVX-512-only mnemonics) because the COPR builder has it, and on the target
+# machine -- a 12th-gen i9 with AVX-512 fused off -- every run died with
+# "Illegal instruction (core dumped)" while the same source built locally ran
+# fine. So the target is pinned explicitly. x86-64-v2 is the level Fedora itself
+# builds for, and the shader work is on the GPU, so a wider baseline buys nothing.
+# Raise it to x86-64-v3 only if every machine that runs this is known to have
+# AVX2.
+%global zigcpu x86-64-v2
+
 %build
 # Zig's dependency fetch and compilation cache live under the builddir so nothing
 # is written outside the build root. The dependency itself (zig-toml) comes over
@@ -121,7 +133,7 @@ export PATH="%{_builddir}/zig-x86_64-linux-%{zigversion}:$PATH"
 export ZIG_GLOBAL_CACHE_DIR="%{_builddir}/zig-global-cache"
 export ZIG_LOCAL_CACHE_DIR="%{_builddir}/zig-local-cache"
 zig version
-zig build --release=safe --build-id=sha1 --summary all
+zig build --release=safe --build-id=sha1 -Dcpu=%{zigcpu} --summary all
 
 %check
 # Upstream's unit tests: parsers, the coordinate transform, config and file
@@ -131,7 +143,7 @@ zig build --release=safe --build-id=sha1 --summary all
 export PATH="%{_builddir}/zig-x86_64-linux-%{zigversion}:$PATH"
 export ZIG_GLOBAL_CACHE_DIR="%{_builddir}/zig-global-cache"
 export ZIG_LOCAL_CACHE_DIR="%{_builddir}/zig-local-cache"
-zig build test --summary all
+zig build test -Dcpu=%{zigcpu} --summary all
 
 %install
 # build.zig lays the whole tree out itself: bin/hyprglaze, share/hyprglaze/
@@ -141,7 +153,7 @@ zig build test --summary all
 export PATH="%{_builddir}/zig-x86_64-linux-%{zigversion}:$PATH"
 export ZIG_GLOBAL_CACHE_DIR="%{_builddir}/zig-global-cache"
 export ZIG_LOCAL_CACHE_DIR="%{_builddir}/zig-local-cache"
-zig build --release=safe --build-id=sha1 --prefix %{buildroot}%{_prefix}
+zig build --release=safe --build-id=sha1 -Dcpu=%{zigcpu} --prefix %{buildroot}%{_prefix}
 
 %files
 %license LICENSE
@@ -152,6 +164,11 @@ zig build --release=safe --build-id=sha1 --prefix %{buildroot}%{_prefix}
 %{_userunitdir}/hyprglaze@.service
 
 %changelog
+* Tue Nov 17 2026 wegweg7979 <diode-crumble-0h@icloud.com> - 0.1.0-2.20261110gitfdafdcf
+- Pin the CPU baseline to x86-64-v2. Zig defaults to -Dcpu=native, so the first
+  build compiled for the COPR builder's AVX-512 and died with SIGILL on the
+  target machines.
+
 * Tue Nov 17 2026 wegweg7979 <diode-crumble-0h@icloud.com> - 0.1.0-1.20261110gitfdafdcf
 - First Fedora packaging: the daemon, its 24 shaders and buddy sprite under
   /usr/share/hyprglaze, and the two systemd user units. Zig 0.17.1 is a pinned
