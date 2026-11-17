@@ -1,0 +1,51 @@
+#!/bin/sh
+# Rewrites rpm/hyprglaze.spec.sources with the sha256 of the two remote sources
+# the spec builds from: the pinned upstream commit archive and the Zig toolchain
+# tarball.
+#
+# Upstream is NOT ours and publishes no tags, so there is no release tarball to
+# hash: the pin is a commit, and the archive GitHub generates for a commit is
+# reproducible only as long as that commit exists. COPR verifies these hashes
+# when it fetches the sources, so a stale entry fails the build rather than
+# silently building a different tree.
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+NAME=hyprglaze
+UPSTREAM_REPO=slastra/hyprglaze
+SPEC="$ROOT/rpm/$NAME.spec"
+
+COMMIT="$(sed -n 's/^%global[[:space:]]*commit[[:space:]]*//p' "$SPEC" | head -1)"
+ZIGVERSION="$(sed -n 's/^%global[[:space:]]*zigversion[[:space:]]*//p' "$SPEC" | head -1)"
+if [ -z "$COMMIT" ] || [ -z "$ZIGVERSION" ]; then
+    echo "spec-sources: could not read commit/zigversion out of $SPEC" >&2
+    exit 1
+fi
+
+SRC_URL="https://github.com/$UPSTREAM_REPO/archive/$COMMIT/$NAME-$COMMIT.tar.gz"
+SRC_TARBALL="$NAME-$COMMIT.tar.gz"
+ZIG_URL="https://ziglang.org/download/$ZIGVERSION/zig-x86_64-linux-$ZIGVERSION.tar.xz"
+ZIG_TARBALL="zig-x86_64-linux-$ZIGVERSION.tar.xz"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+echo "spec-sources: fetching $SRC_URL"
+curl -sSfL "$SRC_URL" -o "$TMP/$SRC_TARBALL"
+# Proof it is the right tree, not a redirect body: two paths only upstream has
+# (the spec itself does not live in this archive).
+tar -tzf "$TMP/$SRC_TARBALL" "$NAME-$COMMIT/build.zig.zon" >/dev/null
+tar -tzf "$TMP/$SRC_TARBALL" "$NAME-$COMMIT/src/core/watcher.lua" >/dev/null
+# ...and that the commit really declares the Zig floor this packaging assumes.
+tar -xzOf "$TMP/$SRC_TARBALL" "$NAME-$COMMIT/build.zig.zon" | grep -q "minimum_zig_version = \"0.17.0\"" ||
+    echo "spec-sources: warning: upstream minimum_zig_version changed; check zigversion in the spec" >&2
+
+echo "spec-sources: fetching $ZIG_URL"
+curl -sSfL "$ZIG_URL" -o "$TMP/$ZIG_TARBALL"
+
+{
+    sha256sum "$TMP/$SRC_TARBALL" | sed "s|$TMP/||"
+    sha256sum "$TMP/$ZIG_TARBALL" | sed "s|$TMP/||"
+} >"$ROOT/rpm/$NAME.spec.sources"
+echo "spec-sources: wrote $ROOT/rpm/$NAME.spec.sources"
+cat "$ROOT/rpm/$NAME.spec.sources"
