@@ -18,6 +18,16 @@ sudo dnf install hyprglaze
 |---|---|
 | `hyprglaze` | The daemon at `/usr/bin/hyprglaze`, its effects (23 shaders, 24 effects — `ai-buddy` shares `buddy.frag`) and the buddy sprite under `/usr/share/hyprglaze`, plus the systemd user units `hyprglaze.service` and `hyprglaze@<monitor>.service` |
 
+### One carried fix
+
+`hyprglaze@.service` ships with `ExecStart=… --output %I` upstream. `%I` is the
+*unescaped* instance, and systemd escapes `-` as `/`, so
+`systemctl --user start hyprglaze@HDMI-A-1` handed the daemon `--output HDMI/A/1`
+and the unit crash-looped (`MonitorNotFound`) — every real connector name has a
+hyphen. The spec rewrites that one argument to `%i` (the literal instance) and
+fails the build if upstream's line stops matching, so the fix cannot go stale
+silently.
+
 Requires `hyprland-bin >= 0.55` — the Lua-config Hyprland the daemon injects its
 watcher into. Fedora has no package named `hyprland`; the Omedora COPR's
 `hyprland-no-session` Provides `hyprland-bin`.

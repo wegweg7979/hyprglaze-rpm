@@ -43,7 +43,7 @@
 
 Name:           hyprglaze
 Version:        0.1.0
-Release:        2.%{commitdate}git%{shortcommit}%{?dist}
+Release:        3.%{commitdate}git%{shortcommit}%{?dist}
 Summary:        Shader wallpaper daemon for Hyprland that reacts to windows, cursor and music
 
 License:        MIT
@@ -156,6 +156,22 @@ export ZIG_GLOBAL_CACHE_DIR="%{_builddir}/zig-global-cache"
 export ZIG_LOCAL_CACHE_DIR="%{_builddir}/zig-local-cache"
 zig build --release=safe --build-id=sha1 -Dcpu=%{zigcpu} --prefix %{buildroot}%{_prefix}
 
+# Upstream's template unit passes the monitor as %I -- the *unescaped* instance --
+# on the reasoning that the two are identical for a plain connector name. They are
+# not: systemd treats "-" as the escape for "/", so `systemctl --user start
+# hyprglaze@HDMI-A-1` handed the daemon `--output HDMI/A/1` and the unit
+# crash-looped (measured on an Intel N100 box: "no output named 'HDMI/A/1'" with
+# "available output: HDMI-A-1", restart counter climbing). Every real connector
+# name (HDMI-A-1, DP-1, eDP-1) contains a hyphen, so the shipped template could
+# never render. %i is the literal instance -- the connector name, untouched.
+# The grep is deliberate: if upstream reworks the line, the build fails here
+# rather than silently shipping the broken unit again.
+sed -i 's|--output %%I|--output %%i|' %{buildroot}%{_userunitdir}/hyprglaze@.service
+grep -q -- 'ExecStart=/usr/bin/hyprglaze --output %%i' %{buildroot}%{_userunitdir}/hyprglaze@.service || {
+    echo "ERROR: hyprglaze@.service no longer matches the --output fixup; check upstream's unit" >&2
+    exit 1
+}
+
 %files
 %license LICENSE
 %doc README.md docs
@@ -165,6 +181,12 @@ zig build --release=safe --build-id=sha1 -Dcpu=%{zigcpu} --prefix %{buildroot}%{
 %{_userunitdir}/hyprglaze@.service
 
 %changelog
+* Wed Nov 18 2026 wegweg7979 <diode-crumble-0h@icloud.com> - 0.1.0-3.20261110gitfdafdcf
+- Fix the template unit: upstream passes the monitor as %I (the unescaped
+  instance) and systemd turns "-" into "/", so hyprglaze@HDMI-A-1 reached the
+  daemon as --output HDMI/A/1 and crash-looped with MonitorNotFound. %i is the
+  literal instance name.
+
 * Tue Nov 17 2026 wegweg7979 <diode-crumble-0h@icloud.com> - 0.1.0-2.20261110gitfdafdcf
 - Pin the CPU baseline to x86-64-v2. Zig defaults to -Dcpu=native, so the first
   build compiled for the COPR builder's AVX-512 and died with SIGILL on the
